@@ -11,13 +11,20 @@ Requiere: numpy, pyvisa, pyvisa-py, pyusb (ver requirements.txt) y la regla
 udev 99-usbtmc-siglent.rules para acceso sin sudo al instrumento.
 
 Uso:
-    python capturar_osciloscopio.py [-h] [canal] [archivo_salida] [--sin-disparo]
+    python capturar_osciloscopio.py [-h] [canal] [archivo_salida] [--sin-disparo] [--streaming]
     python capturar_osciloscopio.py C1 traza_real.csv
+    python capturar_osciloscopio.py --streaming
     python capturar_osciloscopio.py --help
 
 Por defecto arma un disparo SINGLE y espera a que el osciloscopio capture.
 Si el osciloscopio ya está detenido con la traza que quieres (p. ej. la
 armaste manualmente desde el panel), usa --sin-disparo para leerla tal cual.
+
+--streaming abre un gráfico que se va actualizando con cada captura nueva
+(Ctrl+C para detener). No es streaming continuo del ADC -- cada actualización
+es una captura SINGLE completa, repetida tan rápido como el osciloscopio y el
+USB lo permitan (en la práctica, unos pocos Hz). Si tu fenómeno se repite más
+rápido que eso, vas a perderte disparos entre una descarga y la siguiente.
 
 Referencia: Siglent Digital Oscilloscopes Programming Guide, secciones
 WAVEFORM (WF?) y WAVEFORM_SETUP (WFSU).
@@ -147,6 +154,68 @@ def guardar_csv(tiempo, voltaje, archivo_salida):
                comments='', fmt='%.9e')
 
 
+def stream_capturas(osc, canal='C1', esperar_disparo=True):
+    """Generador infinito: repite 'capturar_canal' y va entregando (tiempo, voltaje).
+
+    Esto NO es streaming continuo del ADC -- cada iteración es una captura
+    SINGLE completa (arma, espera disparo, descarga), repetida tan rápido
+    como el osciloscopio y el USB lo permitan. En la práctica eso da unos
+    pocos Hz de actualización, limitados por la espera del disparo y la
+    transferencia de la traza completa por USBTMC, no por la velocidad real
+    del instrumento. Si tu fenómeno se repite más rápido que eso, vas a
+    perderte disparos entre una descarga y la siguiente: no hay buffer de
+    eventos intermedios.
+    """
+    while True:
+        yield capturar_canal(osc, canal=canal, esperar_disparo=esperar_disparo)
+
+
+def graficar_en_vivo(osc, canal='C1', esperar_disparo=True, archivo_salida=None):
+    """Modo --streaming: grafica cada captura nueva hasta que se interrumpa con Ctrl+C.
+
+    Import de matplotlib local a esta función a propósito: el resto del
+    módulo (conectar, capturar_canal, guardar_csv) solo necesita numpy y
+    pyvisa, así que capturar datos sin graficar no debería exigir instalar
+    matplotlib.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ImportError(
+            "--streaming necesita matplotlib, que no está instalado. "
+            "Instálalo con: pip install matplotlib"
+        ) from exc
+
+    fig, ax = plt.subplots()
+    linea, = ax.plot([], [], color='#1f6fd6', lw=1.2)
+    ax.set_xlabel('tiempo  [s]')
+    ax.set_ylabel('voltaje  [V]')
+    ax.set_title(f'Captura en vivo · canal {canal}  (Ctrl+C en la terminal para detener)')
+    ax.grid(alpha=0.3)
+    plt.ion()
+    plt.show()
+
+    ultima = None
+    n = 0
+    try:
+        for tiempo, voltaje in stream_capturas(osc, canal=canal, esperar_disparo=esperar_disparo):
+            ultima = (tiempo, voltaje)
+            n += 1
+            linea.set_data(tiempo, voltaje)
+            ax.relim()
+            ax.autoscale_view()
+            ax.set_title(f'Captura en vivo · canal {canal} · disparo #{n} '
+                        f'(Ctrl+C en la terminal para detener)')
+            fig.canvas.draw_idle()
+            fig.canvas.flush_events()
+    except KeyboardInterrupt:
+        print(f'\nDetenido por el usuario tras {n} captura(s).')
+    finally:
+        if archivo_salida and ultima is not None:
+            guardar_csv(*ultima, archivo_salida)
+            print(f'Última traza guardada en: {archivo_salida}')
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Captura una traza de un osciloscopio Siglent SDS1000(CNL+) "
@@ -160,6 +229,9 @@ def parse_args():
     parser.add_argument('--sin-disparo', action='store_true',
                         help="no armar un disparo SINGLE nuevo; lee la traza que ya "
                             "esté detenida en el osciloscopio")
+    parser.add_argument('--streaming', action='store_true',
+                        help="modo de captura repetida con gráfico en vivo (Ctrl+C para "
+                            "detener); al salir guarda la última traza en archivo_salida")
     return parser.parse_args()
 
 
@@ -168,6 +240,11 @@ def main():
 
     osc = conectar()
     print('Conectado:', osc.query('*IDN?').strip())
+
+    if args.streaming:
+        graficar_en_vivo(osc, canal=args.canal, esperar_disparo=not args.sin_disparo,
+                          archivo_salida=args.archivo_salida)
+        return
 
     tiempo, voltaje = capturar_canal(osc, canal=args.canal,
                                       esperar_disparo=not args.sin_disparo)

@@ -207,6 +207,7 @@ CSV.
 \texttt{python capturar\_osciloscopio.py} & \texttt{C1} (por defecto) & \texttt{traza\_real.csv} (por defecto) \\
 \texttt{python capturar\_osciloscopio.py C2 datos.csv} & \texttt{C2} & \texttt{datos.csv} \\
 \texttt{... --sin-disparo} & el que esté activo & no rearma el disparo \\
+\texttt{... --streaming} & el indicado & guarda solo la \emph{última} traza \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -237,6 +238,29 @@ con datos \textbf{sintéticos} (no una medición real), solo para que veas el
 formato sin necesitar el instrumento a mano.
 \end{nota}
 
+\subsection{Captura en vivo (\texttt{--streaming})}
+\begin{lstlisting}
+python capturar_osciloscopio.py --streaming
+\end{lstlisting}
+Abre una ventana con un gráfico que se actualiza con cada captura nueva
+(arma disparo $\to$ espera $\to$ descarga $\to$ grafica $\to$ repite).
+Presiona \texttt{Ctrl+C} en la terminal para detener; al salir, guarda la
+\textbf{última} traza en el archivo de salida.
+
+\begin{aviso}
+\textbf{Qué es y qué no es esto.} El osciloscopio se comunica por
+SCPI/USBTMC, un protocolo de pregunta-respuesta (``dame lo que hay en
+pantalla ahora''), no un canal de streaming continuo del ADC. Cada
+actualización del gráfico es una captura \texttt{SINGLE} completa, repetida
+tan rápido como el osciloscopio y el USB lo permitan --- en la práctica,
+pocos Hz. Si tu fenómeno se repite más rápido que eso, vas a perderte
+disparos entre una descarga y la siguiente: no hay buffer de eventos
+intermedios. Este modo sirve para \emph{monitorear} mientras ajustas el
+experimento, no para no perderte ningún evento de una serie rápida.
+\end{aviso}
+
+Requiere \texttt{matplotlib} (no es necesario para el resto del script).
+
 % ---- Solucion de problemas --------------------------------------------------
 \section{Solución de problemas comunes}
 
@@ -256,7 +280,10 @@ formato sin necesitar el instrumento a mano.
   Revisa el nivel y la fuente de trigger en el panel del instrumento \\[4pt]
 \texttt{ValueError}: longitud de datos inconsistente &
   Interferencia o corte en la transferencia USB &
-  Vuelve a ejecutar la captura; si persiste, prueba otro cable USB \\
+  Vuelve a ejecutar la captura; si persiste, prueba otro cable USB \\[4pt]
+\texttt{ImportError} al usar \texttt{--streaming} &
+  \texttt{matplotlib} no está instalado &
+  \texttt{pip install matplotlib} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -287,6 +314,9 @@ formato sin necesitar el instrumento a mano.
         captura.
   \item El CSV de salida no guarda la escala ni el modelo del instrumento
         usados --- solo los puntos ya convertidos.
+  \item \texttt{--streaming} no es streaming continuo del ADC: son capturas
+        \texttt{SINGLE} sucesivas a pocos Hz, y solo la última se guarda al
+        salir (ver sección \emph{Captura en vivo}).
 \end{itemize}
 
 % ---- Lista de verificacion ------------------------------------------------

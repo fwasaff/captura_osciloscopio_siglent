@@ -43,6 +43,10 @@ código.
 - Pensado para **disparo único** (`SINGLE`): arma el disparo, espera a que
   el osciloscopio capture, y descarga esa traza. También puede leer una
   traza que ya esté detenida en pantalla (`--sin-disparo`).
+- **Modo `--streaming`:** repite la captura y grafica en vivo (ver
+  [Captura en vivo](#captura-en-vivo---streaming)). No es streaming continuo
+  del ADC, sino capturas `SINGLE` sucesivas tan rápido como el USB lo
+  permita — ver el detalle de esa limitación más abajo.
 - No soporta otras marcas (Tektronix, Rigol, Keysight...) ni protocolos
   distintos de SCPI/USBTMC — ver [Mejoras futuras](#mejoras-futuras).
 
@@ -128,9 +132,37 @@ experimento. En `ejemplos/traza_ejemplo.csv` hay un archivo de muestra
 real) para que veas la forma del archivo sin necesitar el instrumento a
 mano.
 
+## Captura en vivo (`--streaming`)
+
+```bash
+python capturar_osciloscopio.py --streaming
+python capturar_osciloscopio.py C2 ultima_traza.csv --streaming
+```
+
+Abre una ventana con un gráfico que se va actualizando con cada captura
+nueva (arma disparo → espera → descarga → grafica → repite). Presiona
+`Ctrl+C` en la terminal para detener; al salir, guarda la **última** traza
+capturada en `archivo_salida`.
+
+> **Qué es y qué no es esto.** El osciloscopio se comunica por
+> SCPI/USBTMC, un protocolo de pregunta-respuesta ("dame lo que hay en
+> pantalla ahora"), no un canal de streaming continuo del ADC. Cada
+> actualización del gráfico es una captura `SINGLE` completa, repetida tan
+> rápido como el osciloscopio y el USB lo permitan — en la práctica, pocos
+> Hz, limitados por la espera del disparo y la transferencia de la traza
+> completa, no por la velocidad real del instrumento. Si tu fenómeno se
+> repite más rápido que eso, vas a perderte disparos entre una descarga y
+> la siguiente: no hay buffer de eventos intermedios. Para eso, este modo
+> sirve para *monitorear* (ajustar el trigger, ver que la señal se vea
+> bien antes de la captura "buena"), no para no perderse ningún evento de
+> una serie rápida.
+
+Requiere `matplotlib` (no es necesario para el resto del script — ver
+`requirements.txt`).
+
 ## Cómo funciona el código (para entenderlo, no solo copiarlo)
 
-El script tiene seis funciones, cada una con una responsabilidad acotada:
+El script tiene ocho funciones, cada una con una responsabilidad acotada:
 
 | Función | Qué hace |
 |---|---|
@@ -140,6 +172,8 @@ El script tiene seis funciones, cada una con una responsabilidad acotada:
 | `descargar_forma_onda(osc, canal)` | Pide la forma de onda cruda en binario (`WF? DAT2`) y extrae los bytes de datos del bloque SCPI. |
 | `capturar_canal(osc, canal, esperar_disparo)` | Junta todo: arma el disparo, lee los parámetros de escala, descarga los bytes y los convierte en `(tiempo, voltaje)`. |
 | `guardar_csv(tiempo, voltaje, archivo)` | Escribe el CSV final. |
+| `stream_capturas(osc, canal, esperar_disparo)` | Generador (`yield`): repite `capturar_canal` indefinidamente, una traza por iteración. |
+| `graficar_en_vivo(osc, canal, esperar_disparo, archivo_salida)` | Consume `stream_capturas` y actualiza un gráfico de matplotlib con cada traza nueva; implementa `--streaming`. |
 
 Los detalles que vale la pena entender si vas a tocar el código:
 
@@ -178,6 +212,10 @@ Los detalles que vale la pena entender si vas a tocar el código:
   de comandos — puedes `import` las funciones (`conectar`, `capturar_canal`,
   `guardar_csv`) directamente desde tu propio código Python si tu análisis
   ya vive en un notebook o script.
+- **Procesar cada captura en vivo, no solo graficarla:** `stream_capturas`
+  es un generador genérico — puedes consumirlo con tu propio `for` en vez
+  de `graficar_en_vivo` para, por ejemplo, calcular en línea el RMS de cada
+  traza o guardarlas todas (no solo la última) a medida que llegan.
 
 ## Limitaciones actuales
 
@@ -204,9 +242,10 @@ En orden sugerido de prioridad/costo:
 4. **Soporte para otros fabricantes** (Rigol, Tektronix) abstrayendo las
    partes específicas del protocolo Siglent detrás de una interfaz común,
    de modo que cambiar de instrumento no signifique reescribir el script.
-5. **Modo streaming**: en vez de una sola captura `SINGLE` por ejecución,
-   un modo que vaya entregando trazas sucesivas en tiempo real (útil para
-   experimentos que necesitan monitoreo continuo, no solo un transitorio).
+5. **Guardar cada captura del modo `--streaming`**, no solo la última (hoy
+   `graficar_en_vivo` descarta todas las trazas intermedias al salir) ---
+   útil si quieres revisar después cómo varió la señal mientras ajustabas
+   el experimento.
 
 ## Créditos
 

@@ -2,3 +2,6 @@ numpy>=1.24
 pyvisa>=1.13
 pyvisa-py>=0.7
 pyusb>=1.2
+
+# Opcional: solo necesario para --streaming (grafico en vivo)
+matplotlib>=3.5
