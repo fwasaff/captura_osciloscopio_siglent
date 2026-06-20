@@ -126,9 +126,8 @@ señal --- solo descarga lo que el osciloscopio tenga en pantalla.
 \begin{itemize}
   \item Osciloscopio Siglent serie SDS1000(CNL+).
   \item Cable USB tipo B (el que normalmente trae el instrumento).
-  \item Computador con Linux (el procedimiento de permisos de este manual es
-        específico de Linux; en Windows/macOS la conexión USBTMC funciona
-        distinto).
+  \item Un computador con Windows, macOS o Linux --- los tres funcionan; los
+        pasos de instalación difieren según cuál uses (sección siguiente).
 \end{itemize}
 
 \subsection{Software}
@@ -136,19 +135,39 @@ señal --- solo descarga lo que el osciloscopio tenga en pantalla.
   \item Python 3.9 o superior.
   \item Paquetes: \texttt{numpy}, \texttt{pyvisa}, \texttt{pyvisa-py},
         \texttt{pyusb} (listados en \texttt{requirements.txt}).
+  \item En Windows o macOS, además: NI-VISA o Keysight IO Libraries Suite
+        (sección siguiente).
 \end{itemize}
 
 % ---- Instalacion ---------------------------------------------------------------
 \section{Instalación}
+El script usa el VISA del sistema si está instalado, o cae automáticamente
+al backend puro de Python (\texttt{pyvisa-py}) si no hay ninguno --- el caso
+típico en Linux. Por eso los pasos de acceso al instrumento difieren según
+tu sistema operativo.
 
-\subsection{Entorno de Python}
+\subsection{Entorno de Python (todos los sistemas)}
 \begin{lstlisting}
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 \end{lstlisting}
+En Windows (cmd o PowerShell), el segundo comando es
+\texttt{venv\textbackslash Scripts\textbackslash activate} en vez de
+\texttt{source venv/bin/activate}.
 
-\subsection{Permisos USB}
+\subsection{Acceso al instrumento: Windows / macOS}
+Instala \textbf{NI-VISA} (gratis, de National Instruments) o, alternativamente,
+\textbf{Keysight IO Libraries Suite}. El instalador deja todo configurado:
+controlador USB, permisos, reconocimiento del instrumento.
+
+\begin{nota}[title=Sin pasos adicionales]
+A diferencia de Linux, no hace falta ninguna regla de permisos: una vez
+instalado NI-VISA, \texttt{pyvisa.ResourceManager()} encuentra el
+instrumento automáticamente.
+\end{nota}
+
+\subsection{Acceso al instrumento: Linux}
 Linux no permite acceder a dispositivos USB sin privilegios de administrador
 a menos que exista una regla que lo autorice explícitamente.
 
@@ -168,7 +187,7 @@ osciloscopio. Si no haces ambas cosas, seguirás viendo error de permisos
 aunque la regla esté instalada correctamente.
 \end{aviso}
 
-\subsection{Verificación}
+\subsection{Verificación (todos los sistemas)}
 Con el osciloscopio encendido y conectado:
 \begin{lstlisting}
 python capturar_osciloscopio.py --help
@@ -272,9 +291,12 @@ Requiere \texttt{matplotlib} (no es necesario para el resto del script).
 \texttt{RuntimeError}: no se encontró ningún instrumento &
   Cable USB desconectado o instrumento apagado &
   Verifica el cable y que el osciloscopio esté encendido \\[4pt]
-\texttt{PermissionError} al conectar &
+\texttt{PermissionError} al conectar (Linux) &
   Falta la regla udev, o no reconectaste el cable después de instalarla &
-  Repite la sección \emph{Permisos USB}; reconecta el cable \\[4pt]
+  Repite la sección \emph{Acceso al instrumento: Linux}; reconecta el cable \\[4pt]
+\texttt{RuntimeError} sin instrumento (Windows/macOS) &
+  NI-VISA no está instalado &
+  Instala NI-VISA o Keysight IO Libraries Suite \\[4pt]
 \texttt{TimeoutError}: no se detectó disparo &
   El trigger del osciloscopio no se está cumpliendo &
   Revisa el nivel y la fuente de trigger en el panel del instrumento \\[4pt]
@@ -306,7 +328,7 @@ Requiere \texttt{matplotlib} (no es necesario para el resto del script).
 
 % ---- Limitaciones --------------------------------------------------------
 \section{Limitaciones actuales}
-\begin{itemize}[label={$\square$}]
+\begin{itemize}[label={$\square$}, itemsep=0pt, topsep=2pt]
   \item Un solo canal por llamada.
   \item Solo probado en Siglent SDS1000CNL+; otros modelos Siglent deberían
         funcionar si comparten el protocolo, pero no está verificado.
@@ -321,7 +343,7 @@ Requiere \texttt{matplotlib} (no es necesario para el resto del script).
 
 % ---- Lista de verificacion ------------------------------------------------
 \section{Antes de capturar: lista de verificación}
-\begin{itemize}[label={$\square$}]
+\begin{itemize}[label={$\square$}, itemsep=0pt, topsep=2pt]
   \item El osciloscopio está encendido y el cable USB conectado.
   \item La señal que quiero medir ya se ve correctamente en pantalla.
   \item El trigger está configurado (nivel y fuente) para disparar con mi

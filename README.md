@@ -17,6 +17,31 @@ te sirve tal cual.
 > de problemas y checklist previo a capturar. Este README es la referencia
 > rápida; el manual es la versión para imprimir o consultar paso a paso.
 
+## Inicio rápido
+
+```bash
+git clone https://github.com/fwasaff/captura_osciloscopio_siglent.git
+cd captura_osciloscopio_siglent
+python3 -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Si usas **Windows o macOS**, instala además [NI-VISA](https://www.ni.com/es/support/downloads/drivers/download.ni-visa.html)
+(gratis) y listo — sin pasos adicionales de permisos.
+Si usas **Linux**, hace falta un paso más (una regla de permisos USB): ver
+[Instalación → Linux](#linux) más abajo, es copiar y pegar cinco líneas.
+
+Con el osciloscopio conectado y encendido:
+
+```bash
+python capturar_osciloscopio.py          # una captura -> traza_real.csv
+python capturar_osciloscopio.py --streaming   # gráfico en vivo, Ctrl+C para detener
+```
+
+Si algo falla, la sección [Solución de problemas](#solución-de-problemas-comunes)
+de este README (o del manual en PDF) cubre los errores más comunes con su
+causa y solución.
+
 ## ¿Para qué proyectos te sirve esto?
 
 Cualquier experimento de laboratorio donde midas una señal transitoria con
@@ -52,15 +77,32 @@ código.
 
 ## Instalación
 
-### 1. Python y dependencias
+El script usa el VISA del sistema si está instalado (Windows/macOS), o cae
+automáticamente al backend puro de Python `pyvisa-py` si no hay ninguno
+instalado (el caso típico en Linux). Por eso los pasos difieren según tu
+sistema operativo — el código es el mismo, solo cambia cómo el sistema le da
+acceso al puerto USB.
+
+### 1. Python y dependencias (todos los sistemas)
 
 ```bash
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate          # en Windows (cmd o PowerShell): venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Permisos USB (regla udev)
+### 2. Acceso al instrumento
+
+#### Windows / macOS
+
+Instala **[NI-VISA](https://www.ni.com/es/support/downloads/drivers/download.ni-visa.html)**
+(gratis, de National Instruments) o, alternativamente, **Keysight IO
+Libraries Suite**. El instalador deja todo configurado: controlador USB,
+permisos, reconocimiento del instrumento. No hace falta ningún paso de
+permisos adicional — `pyvisa.ResourceManager()` encuentra el instrumento
+automáticamente una vez que NI-VISA está instalado.
+
+#### Linux
 
 Linux no deja acceder a dispositivos USB sin privilegios de administrador a
 menos que exista una regla que lo autorice explícitamente. Sin este paso,
@@ -166,7 +208,7 @@ El script tiene ocho funciones, cada una con una responsabilidad acotada:
 
 | Función | Qué hace |
 |---|---|
-| `conectar()` | Abre la conexión USB con el primer instrumento que encuentre. |
+| `conectar()` | Abre la conexión USB con el primer instrumento que encuentre, usando VISA del sistema si existe (Windows/macOS) o `pyvisa-py` si no (Linux). |
 | `armar_y_esperar_disparo(osc)` | Pone el osciloscopio en `SINGLE` y espera a que dispare (`TRMD?` hasta que diga `STOP`). |
 | `leer_parametro_numerico(osc, comando)` | Le pregunta al osciloscopio un valor (p. ej. `C1:VDIV?`) e interpreta el prefijo de ingeniería (`u`, `m`, `k`, `M`...) de la respuesta. |
 | `descargar_forma_onda(osc, canal)` | Pide la forma de onda cruda en binario (`WF? DAT2`) y extrae los bytes de datos del bloque SCPI. |

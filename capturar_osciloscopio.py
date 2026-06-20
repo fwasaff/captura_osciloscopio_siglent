@@ -7,8 +7,10 @@ señal que el osciloscopio pueda capturar (circuitos RC/RLC, sensores ópticos,
 acelerómetros, lo que sea), no solo para el proyecto de gemelo digital RLC en
 el que se usó por primera vez. Ver README.md para una guía completa.
 
-Requiere: numpy, pyvisa, pyvisa-py, pyusb (ver requirements.txt) y la regla
-udev 99-usbtmc-siglent.rules para acceso sin sudo al instrumento.
+Requiere: numpy, pyvisa (ver requirements.txt) y, según el sistema operativo,
+o bien VISA instalado (Windows/macOS: NI-VISA o Keysight IO Libraries) o bien
+pyvisa-py + pyusb + la regla udev de este repositorio (Linux). Ver README.md,
+sección Instalación, para los pasos específicos de cada sistema.
 
 Uso:
     python capturar_osciloscopio.py [-h] [canal] [archivo_salida] [--sin-disparo] [--streaming]
@@ -44,29 +46,47 @@ _PREFIJOS_SI = {'p': 1e-12, 'n': 1e-9, 'u': 1e-6, 'µ': 1e-6, 'm': 1e-3,
 _RE_NUMERO = re.compile(r'^([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*(.*)$')
 
 
-def conectar():
-    """Abre el primer instrumento USBTMC que pyvisa-py encuentre.
+def _abrir_resource_manager():
+    """Usa VISA del sistema si está instalado (NI-VISA, Keysight IO Libraries);
+    si no, recurre al backend puro de Python (pyvisa-py).
 
-    El error de permisos (PermissionError sobre /dev/usbtmc0) es, en la
-    práctica, el motivo más común por el que esto falla la primera vez que
-    un/a estudiante lo prueba en un computador nuevo -- de ahí el mensaje
-    explícito en vez de dejar pasar la traza cruda de Python.
+    Esto es lo que hace que el mismo script funcione en Windows/macOS (donde
+    lo más simple es instalar NI-VISA y no tocar nada más) y en Linux (donde
+    pyvisa-py + la regla udev de este repositorio evita instalar nada extra).
+    pyvisa.ResourceManager() sin argumentos falla si no encuentra una VISA de
+    sistema -- por eso el try/except, no es un error real del programa.
     """
-    rm = pyvisa.ResourceManager('@py')
+    try:
+        return pyvisa.ResourceManager()
+    except Exception:
+        return pyvisa.ResourceManager('@py')
+
+
+def conectar():
+    """Abre el primer instrumento USBTMC que se encuentre.
+
+    El error de permisos es, en la práctica, el motivo más común por el que
+    esto falla la primera vez que un/a estudiante lo prueba en un computador
+    nuevo -- de ahí el mensaje explícito en vez de dejar pasar la traza cruda
+    de Python.
+    """
+    rm = _abrir_resource_manager()
     recursos = rm.list_resources()
     if not recursos:
         raise RuntimeError(
-            "No se encontró ningún instrumento USBTMC conectado. "
-            "Verifica el cable USB y que el osciloscopio esté encendido."
+            "No se encontró ningún instrumento USBTMC conectado. Verifica el "
+            "cable USB y que el osciloscopio esté encendido. En Windows/macOS, "
+            "verifica además que tengas instalado NI-VISA o Keysight IO "
+            "Libraries Suite (ver README.md, sección Instalación)."
         )
     try:
         osc = rm.open_resource(recursos[0])
     except PermissionError as exc:
         raise PermissionError(
-            "Sin permiso para acceder al instrumento USB. "
-            "Revisa que la regla udev 99-usbtmc-siglent.rules esté instalada "
-            "(ver README.md, sección Instalación) y reconecta el cable USB "
-            "tras instalarla."
+            "Sin permiso para acceder al instrumento USB. En Linux: revisa "
+            "que la regla udev 99-usbtmc-siglent.rules esté instalada (ver "
+            "README.md, sección Instalación) y reconecta el cable USB tras "
+            "instalarla."
         ) from exc
     osc.timeout = 15000
     osc.chunk_size = 1024 * 1024
