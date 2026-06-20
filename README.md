@@ -12,6 +12,11 @@ del tiempo, sin importar qué generó esa señal. Si tu proyecto necesita
 "sacar una curva del osciloscopio a una planilla o a Python", probablemente
 te sirve tal cual.
 
+> **Manual en PDF:** [`manual/manual_captura_osciloscopio.pdf`](manual/manual_captura_osciloscopio.pdf)
+> tiene esta misma información en formato imprimible, con tabla de solución
+> de problemas y checklist previo a capturar. Este README es la referencia
+> rápida; el manual es la versión para imprimir o consultar paso a paso.
+
 ## ¿Para qué proyectos te sirve esto?
 
 Cualquier experimento de laboratorio donde midas una señal transitoria con
