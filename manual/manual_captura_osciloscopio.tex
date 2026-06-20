@@ -276,7 +276,12 @@ formato sin necesitar el instrumento a mano.
 python capturar_osciloscopio.py --streaming
 \end{lstlisting}
 Abre una ventana con un gráfico que se actualiza con cada captura nueva
-(arma disparo $\to$ espera $\to$ descarga $\to$ grafica $\to$ repite).
+(arma disparo $\to$ espera $\to$ descarga $\to$ grafica $\to$ repite), más
+un panel lateral con estadísticas de la traza actual (mín./máx., pico a
+pico, RMS, número de puntos, ventana de tiempo, frecuencia de
+actualización). Los ejes no se reencuadran en cada captura --- el rango se
+fija con la primera y solo se \emph{expande} si una traza nueva no entra,
+para que la ventana se vea estable y no salte de escala todo el tiempo.
 Presiona \texttt{Ctrl+C} en la terminal para detener; al salir, guarda la
 \textbf{última} traza en el archivo de salida.
 

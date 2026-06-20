@@ -197,9 +197,17 @@ python capturar_osciloscopio.py C2 ultima_traza.csv --streaming
 ```
 
 Abre una ventana con un gráfico que se va actualizando con cada captura
-nueva (arma disparo → espera → descarga → grafica → repite). Presiona
+nueva (arma disparo → espera → descarga → grafica → repite), más un panel
+lateral con estadísticas de la traza actual (mín./máx./pico a pico/RMS,
+número de puntos, ventana de tiempo, frecuencia de actualización). Presiona
 `Ctrl+C` en la terminal para detener; al salir, guarda la **última** traza
 capturada en `archivo_salida`.
+
+Los ejes no se reencuadran en cada captura — eso se ve nervioso si el ruido
+hace variar un poco el mínimo o máximo de cada traza. El rango se fija con
+la primera captura y solo se **expande** si una traza nueva no entra; nunca
+se achica. El resultado es una ventana estable, no una que salta de escala
+todo el tiempo.
 
 > **Qué es y qué no es esto.** El osciloscopio se comunica por
 > SCPI/USBTMC, un protocolo de pregunta-respuesta ("dame lo que hay en
@@ -230,7 +238,7 @@ El script tiene ocho funciones, cada una con una responsabilidad acotada:
 | `capturar_canal(osc, canal, esperar_disparo)` | Junta todo: arma el disparo, lee los parámetros de escala, descarga los bytes y los convierte en `(tiempo, voltaje)`. |
 | `guardar_csv(tiempo, voltaje, archivo)` | Escribe el CSV final. |
 | `stream_capturas(osc, canal, esperar_disparo)` | Generador (`yield`): repite `capturar_canal` indefinidamente, una traza por iteración. |
-| `graficar_en_vivo(osc, canal, esperar_disparo, archivo_salida)` | Consume `stream_capturas` y actualiza un gráfico de matplotlib con cada traza nueva; implementa `--streaming`. |
+| `graficar_en_vivo(osc, canal, esperar_disparo, archivo_salida)` | Consume `stream_capturas` y actualiza un gráfico de matplotlib (con panel de estadísticas y ejes estables) en cada traza nueva; implementa `--streaming`. |
 | `_OsciloscopioSimulado` | Implementa `query`/`write`/`read_raw` con una señal sintética en vez de hardware real; implementa `--demo`. |
 
 Los detalles que vale la pena entender si vas a tocar el código:

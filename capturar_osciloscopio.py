@@ -275,6 +275,12 @@ def graficar_en_vivo(osc, canal='C1', esperar_disparo=True, archivo_salida=None)
     módulo (conectar, capturar_canal, guardar_csv) solo necesita numpy y
     pyvisa, así que capturar datos sin graficar no debería exigir instalar
     matplotlib.
+
+    Los ejes NO se reencuadran en cada captura (eso se ve nervioso si el
+    ruido hace variar un poco el mínimo/máximo de cada traza): el rango se
+    fija con la primera captura y solo se EXPANDE si una traza nueva no
+    entra -- nunca se achica. El panel lateral muestra estadísticas de la
+    traza actual, en el mismo estilo del panel de texto de gemelo.py.
     """
     try:
         import matplotlib.pyplot as plt
@@ -284,26 +290,66 @@ def graficar_en_vivo(osc, canal='C1', esperar_disparo=True, archivo_salida=None)
             "Instálalo con: pip install matplotlib"
         ) from exc
 
-    fig, ax = plt.subplots()
+    fig = plt.figure(figsize=(10, 5.5))
+    fig.canvas.manager.set_window_title(f'Captura en vivo - canal {canal}')
+    ax = fig.add_axes([0.08, 0.12, 0.62, 0.80])
     linea, = ax.plot([], [], color='#1f6fd6', lw=1.2)
     ax.set_xlabel('tiempo  [s]')
     ax.set_ylabel('voltaje  [V]')
-    ax.set_title(f'Captura en vivo · canal {canal}  (Ctrl+C en la terminal para detener)')
+    ax.set_title(f'Canal {canal}  ·  Ctrl+C en la terminal para detener')
     ax.grid(alpha=0.3)
+
+    txt = fig.text(0.74, 0.90, '', fontsize=10, va='top', family='monospace',
+                    bbox=dict(boxstyle='round', fc='#f4f4f0', ec='#cccccc'))
     plt.ion()
     plt.show()
 
+    limite_x, limite_y = None, None
+
+    def _actualizar_limites(tiempo, voltaje):
+        nonlocal limite_x, limite_y
+        margen = max((voltaje.max() - voltaje.min()) * 0.1, 1e-3)
+        ymin, ymax = voltaje.min() - margen, voltaje.max() + margen
+        if limite_x is None:
+            limite_x = [float(tiempo[0]), float(tiempo[-1])]
+        if limite_y is None:
+            limite_y = [float(ymin), float(ymax)]
+        else:
+            limite_y[0] = min(limite_y[0], float(ymin))
+            limite_y[1] = max(limite_y[1], float(ymax))
+        ax.set_xlim(*limite_x)
+        ax.set_ylim(*limite_y)
+
     ultima = None
     n = 0
+    t_anterior = None
     try:
         for tiempo, voltaje in stream_capturas(osc, canal=canal, esperar_disparo=esperar_disparo):
             ultima = (tiempo, voltaje)
             n += 1
+            ahora = time.time()
+            hz = 1.0 / (ahora - t_anterior) if t_anterior else 0.0
+            t_anterior = ahora
+
             linea.set_data(tiempo, voltaje)
-            ax.relim()
-            ax.autoscale_view()
-            ax.set_title(f'Captura en vivo · canal {canal} · disparo #{n} '
-                        f'(Ctrl+C en la terminal para detener)')
+            _actualizar_limites(tiempo, voltaje)
+
+            txt.set_text(
+                f"CAPTURA EN VIVO\n"
+                f"Canal:    {canal}\n"
+                f"Disparo:  #{n}\n"
+                f"\n"
+                f"V_min  = {voltaje.min():+7.3f} V\n"
+                f"V_max  = {voltaje.max():+7.3f} V\n"
+                f"V_pp   = {voltaje.max() - voltaje.min():7.3f} V\n"
+                f"V_rms  = {np.sqrt(np.mean(voltaje ** 2)):7.3f} V\n"
+                f"V_med  = {voltaje.mean():+7.3f} V\n"
+                f"\n"
+                f"n = {len(voltaje)} puntos\n"
+                f"ventana = {(tiempo[-1] - tiempo[0]) * 1e6:.1f} us\n"
+                f"\n"
+                f"actualiz. = {hz:.1f} Hz"
+            )
             fig.canvas.draw_idle()
             fig.canvas.flush_events()
     except KeyboardInterrupt:
