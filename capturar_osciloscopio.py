@@ -13,10 +13,17 @@ pyvisa-py + pyusb + la regla udev de este repositorio (Linux). Ver README.md,
 sección Instalación, para los pasos específicos de cada sistema.
 
 Uso:
-    python capturar_osciloscopio.py [-h] [canal] [archivo_salida] [--sin-disparo] [--streaming]
+    python capturar_osciloscopio.py [-h] [canal] [archivo_salida] [--sin-disparo] [--streaming] [--demo]
     python capturar_osciloscopio.py C1 traza_real.csv
     python capturar_osciloscopio.py --streaming
+    python capturar_osciloscopio.py --demo
     python capturar_osciloscopio.py --help
+
+--demo simula el osciloscopio con una señal sintética (un escalón con ruido),
+sin necesitar el instrumento real conectado ni VISA instalado. Sirve para
+practicar el flujo completo -- captura, --streaming, lectura del CSV -- antes
+de tener acceso al instrumento de verdad. Los datos generados NO son una
+medición real; el script lo deja explícito en la salida por consola.
 
 Por defecto arma un disparo SINGLE y espera a que el osciloscopio capture.
 Si el osciloscopio ya está detenido con la traza que quieres (p. ej. la
@@ -46,6 +53,72 @@ _PREFIJOS_SI = {'p': 1e-12, 'n': 1e-9, 'u': 1e-6, 'µ': 1e-6, 'm': 1e-3,
 _RE_NUMERO = re.compile(r'^([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*(.*)$')
 
 
+_N_MUESTRAS_DEMO = 20480
+_VDIV_DEMO = 0.5      # V/div
+_OFST_DEMO = 0.0      # V
+_TDIV_DEMO = 20e-6    # s/div
+_TRDL_DEMO = 40e-6    # s (retardo de trigger)
+_SARA_DEMO = 1e8      # muestras/s (100 MSa/s, como el SDS1102CNL+ real)
+
+
+def _generar_codigos_demo(rng):
+    """Genera una señal sintética (un escalón con ruido) y la codifica como
+    int8, igual que lo haría el osciloscopio real, usando la escala VDIV/OFST
+    de --demo. NO es una medición real -- solo sirve para practicar el flujo.
+    """
+    dt = 1.0 / _SARA_DEMO
+    t0 = _TRDL_DEMO - (_TDIV_DEMO * GRID_HORIZONTAL / 2.0)
+    t = t0 + dt * np.arange(_N_MUESTRAS_DEMO)
+
+    baseline = -0.9
+    amplitud = 1.9 + 0.1 * rng.standard_normal()   # un poco de variación entre capturas
+    tau = 15e-6 * (1.0 + 0.1 * rng.standard_normal())
+    voltaje = np.where(t < 0, baseline,
+                        baseline + amplitud * (1.0 - np.exp(-t / tau)))
+    voltaje += rng.normal(0.0, 0.01, t.shape)  # ruido de medición, ~10 mV
+
+    codigos = np.round((voltaje + _OFST_DEMO) / (_VDIV_DEMO / 25.0))
+    codigos = np.clip(codigos, -128, 127).astype(np.int8)
+    return codigos
+
+
+class _OsciloscopioSimulado:
+    """Implementa lo mínimo de la interfaz de pyvisa que el resto del módulo
+    necesita (query, write, read_raw), para poder ejercitar el mismo camino
+    de código que con el instrumento real -- sin tener uno conectado. Usado
+    por --demo.
+    """
+
+    def __init__(self):
+        self._rng = np.random.default_rng()
+
+    def query(self, comando):
+        comando = comando.strip().upper()
+        if comando == '*IDN?':
+            return 'Siglent Technologies,SDS1102CNL+ (SIMULADO),DEMO,1.0.0'
+        if comando == 'TRMD?':
+            return 'TRMD STOP'
+        if comando.endswith(':VDIV?'):
+            return f'VDIV {_VDIV_DEMO * 1e3:.1f}mV'
+        if comando.endswith(':OFST?'):
+            return f'OFST {_OFST_DEMO:.2f}V'
+        if comando == 'TDIV?':
+            return f'TDIV {_TDIV_DEMO * 1e6:.1f}us'
+        if comando == 'TRDL?':
+            return f'TRDL {_TRDL_DEMO * 1e6:.1f}us'
+        if comando == 'SARA?':
+            return f'SARA {_SARA_DEMO / 1e6:.1f}MSa'
+        raise ValueError(f"Comando SCPI no soportado en modo demo: '{comando}'")
+
+    def write(self, comando):
+        pass  # en modo demo no hay nada que enviar a un instrumento real
+
+    def read_raw(self):
+        time.sleep(0.2)  # simula la latencia real de armar+transferir una captura
+        codigos = _generar_codigos_demo(self._rng)
+        return f'#9{len(codigos):09d}'.encode() + codigos.tobytes()
+
+
 def _abrir_resource_manager():
     """Usa VISA del sistema si está instalado (NI-VISA, Keysight IO Libraries);
     si no, recurre al backend puro de Python (pyvisa-py).
@@ -62,14 +135,19 @@ def _abrir_resource_manager():
         return pyvisa.ResourceManager('@py')
 
 
-def conectar():
-    """Abre el primer instrumento USBTMC que se encuentre.
+def conectar(demo=False):
+    """Abre el primer instrumento USBTMC que se encuentre, o un osciloscopio
+    simulado si demo=True (ver --demo) -- útil para practicar el flujo
+    completo sin tener el instrumento real a mano.
 
     El error de permisos es, en la práctica, el motivo más común por el que
     esto falla la primera vez que un/a estudiante lo prueba en un computador
     nuevo -- de ahí el mensaje explícito en vez de dejar pasar la traza cruda
     de Python.
     """
+    if demo:
+        return _OsciloscopioSimulado()
+
     rm = _abrir_resource_manager()
     recursos = rm.list_resources()
     if not recursos:
@@ -252,14 +330,21 @@ def parse_args():
     parser.add_argument('--streaming', action='store_true',
                         help="modo de captura repetida con gráfico en vivo (Ctrl+C para "
                             "detener); al salir guarda la última traza en archivo_salida")
+    parser.add_argument('--demo', action='store_true',
+                        help="simula el osciloscopio con una señal sintética, sin "
+                            "necesitar el instrumento real ni VISA instalado (para "
+                            "practicar el flujo completo)")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
 
-    osc = conectar()
+    osc = conectar(demo=args.demo)
     print('Conectado:', osc.query('*IDN?').strip())
+    if args.demo:
+        print('(Modo demo: esto NO es una medición real, es una señal sintética '
+              'para practicar.)')
 
     if args.streaming:
         graficar_en_vivo(osc, canal=args.canal, esperar_disparo=not args.sin_disparo,

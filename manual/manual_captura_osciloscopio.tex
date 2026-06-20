@@ -107,6 +107,18 @@ de cualquier tipo. El script no asume nada sobre el origen físico de la
 señal --- solo descarga lo que el osciloscopio tenga en pantalla.
 \end{nota}
 
+\begin{nota}[title=¿Todavía no tienes el osciloscopio a mano?]
+Prueba primero el modo \texttt{--demo}: simula el instrumento con una señal
+sintética, sin hardware ni VISA instalado, para practicar el flujo completo
+antes del día de laboratorio.
+\begin{lstlisting}
+python capturar_osciloscopio.py --demo
+python capturar_osciloscopio.py --demo --streaming
+\end{lstlisting}
+La consola avisa explícitamente que los datos son sintéticos, para que
+nunca se confundan con una medición real.
+\end{nota}
+
 % ---- Alcance ------------------------------------------------------------------
 \section{Alcance}
 \begin{itemize}
@@ -115,6 +127,8 @@ señal --- solo descarga lo que el osciloscopio tenga en pantalla.
   \item Captura \textbf{un canal a la vez} (\texttt{C1}, \texttt{C2}, etc.).
   \item Pensado para disparo único (\texttt{SINGLE}); también puede leer una
         traza ya detenida en pantalla.
+  \item \texttt{--demo}: simula el instrumento con una señal sintética, sin
+        hardware ni VISA, para practicar.
   \item No soporta otras marcas de osciloscopio (Tektronix, Rigol,
         Keysight) ni protocolos distintos de SCPI/USBTMC.
 \end{itemize}

@@ -26,12 +26,24 @@ python3 -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activ
 pip install -r requirements.txt
 ```
 
-Si usas **Windows o macOS**, instala además [NI-VISA](https://www.ni.com/es/support/downloads/drivers/download.ni-visa.html)
+**¿Todavía no tienes el osciloscopio a mano?** Prueba primero el modo demo
+— simula el instrumento con una señal sintética, sin hardware ni VISA:
+
+```bash
+python capturar_osciloscopio.py --demo
+python capturar_osciloscopio.py --demo --streaming   # gráfico en vivo, Ctrl+C para detener
+```
+
+Esto te deja practicar el flujo completo (instalar, capturar, leer el CSV,
+ver el gráfico en vivo) antes del día de laboratorio. La consola avisa
+explícitamente que los datos son sintéticos, para que nunca se confundan
+con una medición real.
+
+Cuando tengas el instrumento real: si usas **Windows o macOS**, instala
+además [NI-VISA](https://www.ni.com/es/support/downloads/drivers/download.ni-visa.html)
 (gratis) y listo — sin pasos adicionales de permisos.
 Si usas **Linux**, hace falta un paso más (una regla de permisos USB): ver
 [Instalación → Linux](#linux) más abajo, es copiar y pegar cinco líneas.
-
-Con el osciloscopio conectado y encendido:
 
 ```bash
 python capturar_osciloscopio.py          # una captura -> traza_real.csv
@@ -72,6 +84,9 @@ código.
   [Captura en vivo](#captura-en-vivo---streaming)). No es streaming continuo
   del ADC, sino capturas `SINGLE` sucesivas tan rápido como el USB lo
   permita — ver el detalle de esa limitación más abajo.
+- **Modo `--demo`:** simula el osciloscopio con una señal sintética, sin
+  hardware ni VISA instalado — para practicar el flujo completo antes de
+  tener el instrumento real (ver [Inicio rápido](#inicio-rápido)).
 - No soporta otras marcas (Tektronix, Rigol, Keysight...) ni protocolos
   distintos de SCPI/USBTMC — ver [Mejoras futuras](#mejoras-futuras).
 
@@ -216,6 +231,7 @@ El script tiene ocho funciones, cada una con una responsabilidad acotada:
 | `guardar_csv(tiempo, voltaje, archivo)` | Escribe el CSV final. |
 | `stream_capturas(osc, canal, esperar_disparo)` | Generador (`yield`): repite `capturar_canal` indefinidamente, una traza por iteración. |
 | `graficar_en_vivo(osc, canal, esperar_disparo, archivo_salida)` | Consume `stream_capturas` y actualiza un gráfico de matplotlib con cada traza nueva; implementa `--streaming`. |
+| `_OsciloscopioSimulado` | Implementa `query`/`write`/`read_raw` con una señal sintética en vez de hardware real; implementa `--demo`. |
 
 Los detalles que vale la pena entender si vas a tocar el código:
 
