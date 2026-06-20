@@ -1,0 +1,12 @@
+# Datos capturados (cada estudiante genera los suyos; no se versionan)
+*.csv
+!ejemplos/*.csv
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Logs
+*.log

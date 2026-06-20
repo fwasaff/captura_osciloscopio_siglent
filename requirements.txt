@@ -1,0 +1,4 @@
+numpy>=1.24
+pyvisa>=1.13
+pyvisa-py>=0.7
+pyusb>=1.2

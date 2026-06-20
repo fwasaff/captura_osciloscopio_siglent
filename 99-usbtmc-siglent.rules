@@ -1,0 +1,18 @@
+# Regla udev para acceder a osciloscopios Siglent por USBTMC sin sudo.
+#
+# 0xf4ec (idVendor) es el ID de fabricante de Siglent Technologies, compartido
+# por toda su linea SDS (osciloscopios), SDG (generadores) y SPD (fuentes).
+# Si tu instrumento no es reconocido, verifica su idVendor real con:
+#     lsusb
+# y ajusta el valor abajo si es distinto.
+#
+# Instalacion (ver README.md, seccion "Instalacion"):
+#   sudo cp 99-usbtmc-siglent.rules /etc/udev/rules.d/
+#   sudo groupadd -f usbtmc
+#   sudo usermod -aG usbtmc "$USER"
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#   # desconecta y reconecta el cable USB del instrumento despues de esto
+
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="f4ec", MODE="0666", GROUP="usbtmc"
+KERNEL=="usbtmc*", MODE="0666", GROUP="usbtmc"
