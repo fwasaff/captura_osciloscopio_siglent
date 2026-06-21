@@ -299,6 +299,59 @@ experimento, no para no perderte ningún evento de una serie rápida.
 
 Requiere \texttt{matplotlib} (no es necesario para el resto del script).
 
+\subsection{Espectro de frecuencias (\texttt{--fft})}
+\begin{lstlisting}
+python capturar_osciloscopio.py --streaming --fft
+\end{lstlisting}
+Agrega un segundo panel con el espectro de amplitud (FFT) de cada captura,
+en escala log-log. Útil para diagnosticar \textbf{ruido de alta
+frecuencia}: interferencia de fuentes conmutadas, RF, o el propio contenido
+espectral del transitorio (p.\,ej. la frecuencia natural de un RLC).
+
+\begin{aviso}
+\textbf{Lo que NO sirve para ver: ruido de red (50/60 Hz).} La resolución
+en frecuencia es $1/\text{ventana}$ --- con una ventana típica de pocos
+cientos de microsegundos, eso son varios \textbf{kHz} por punto, demasiado
+grueso para resolver una frecuencia de 50 Hz. Se necesitaría una ventana de
+captura mucho más larga (decenas de milisegundos como mínimo), que este
+script no controla directamente --- depende de la base de tiempo
+configurada en el osciloscopio.
+\end{aviso}
+
+% ---- Promediar capturas -----------------------------------------------------
+\section{Promediar capturas (\texttt{--promediar})}
+\begin{lstlisting}
+python capturar_osciloscopio.py --promediar 20 promedio.csv
+\end{lstlisting}
+Captura $N$ trazas y guarda su \textbf{promedio punto a punto}, con la
+desviación estándar como tercera columna (\texttt{incertidumbre[V]}) ---
+el ruido aleatorio cae como $1/\sqrt{N}$ al promediar, el resultado
+clásico de mediciones repetidas. El resumen en consola incluye la
+reducción de ruido esperada para el $N$ elegido.
+
+\begin{nota}[title=No se combina con --streaming]
+Son dos modos distintos: uno repite y monitorea, el otro repite y
+promedia. Si se piden ambos a la vez, el script se detiene con un mensaje
+de error claro en vez de hacer algo ambiguo.
+\end{nota}
+
+% ---- Log de estadisticas -----------------------------------------------------
+\section{Log de estadísticas (\texttt{--log-estadisticas})}
+\begin{lstlisting}
+python capturar_osciloscopio.py --log-estadisticas sesion.csv
+python capturar_osciloscopio.py --streaming --log-estadisticas sesion.csv
+\end{lstlisting}
+Agrega una fila (\texttt{disparo, timestamp, V\_min, V\_max, V\_pp, V\_rms,
+V\_med}) por cada captura al archivo indicado. Si el archivo ya existe,
+sigue agregando filas --- es un log que \textbf{crece entre sesiones}, no
+se sobrescribe. Con \texttt{--streaming} se agrega una fila por disparo;
+sin él, una fila por ejecución del script.
+
+Útil para responder, con tus propios datos y herramientas, preguntas como
+``¿qué tan repetible fue mi medición?'' o ``¿mi montaje derivó durante la
+sesión?'' --- el script solo registra los números, no decide qué
+significan.
+
 % ---- Solucion de problemas --------------------------------------------------
 \section{Solución de problemas comunes}
 
@@ -335,10 +388,10 @@ Requiere \texttt{matplotlib} (no es necesario para el resto del script).
   \item \textbf{Dos canales:} llama a la función de captura una vez por
         canal (\texttt{C1}, luego \texttt{C2}) y junta ambos resultados en
         un CSV de tres columnas.
-  \item \textbf{Varias repeticiones:} guarda cada traza con un nombre
-        distinto (\texttt{traza\_001.csv}, \texttt{traza\_002.csv}, \ldots)
-        y promedia después en tu análisis --- el script no promedia nada
-        por sí mismo, a propósito.
+  \item \textbf{Varias repeticiones:} usa \texttt{--promediar N} si quieres
+        el promedio con incertidumbre. Si en cambio quieres conservar cada
+        traza individual sin promediar, guarda cada una con un nombre
+        distinto (\texttt{traza\_001.csv}, \texttt{traza\_002.csv}, \ldots).
   \item \textbf{Usarlo desde tu propio script:} puedes importar las
         funciones (\texttt{conectar}, \texttt{capturar\_canal},
         \texttt{guardar\_csv}) directamente en vez de usar la línea de

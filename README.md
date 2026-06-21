@@ -87,6 +87,13 @@ código.
 - **Modo `--demo`:** simula el osciloscopio con una señal sintética, sin
   hardware ni VISA instalado — para practicar el flujo completo antes de
   tener el instrumento real (ver [Inicio rápido](#inicio-rápido)).
+- **`--promediar N`:** captura N trazas y guarda su promedio con
+  incertidumbre (ver [Promediar capturas](#promediar-capturas---promediar)).
+- **`--log-estadisticas ARCHIVO`:** registra estadísticas de cada captura en
+  un CSV aparte, que crece entre sesiones (ver
+  [Log de estadísticas](#log-de-estadísticas---log-estadisticas)).
+- **`--fft`** (con `--streaming`): agrega un panel con el espectro de
+  frecuencias de cada captura, para diagnosticar ruido de alta frecuencia.
 - No soporta otras marcas (Tektronix, Rigol, Keysight...) ni protocolos
   distintos de SCPI/USBTMC — ver [Mejoras futuras](#mejoras-futuras).
 
@@ -225,9 +232,61 @@ todo el tiempo.
 Requiere `matplotlib` (no es necesario para el resto del script — ver
 `requirements.txt`).
 
+### Espectro de frecuencias (`--fft`)
+
+```bash
+python capturar_osciloscopio.py --streaming --fft
+```
+
+Agrega un segundo panel con el espectro de amplitud (FFT) de cada captura,
+en escala log-log. Útil para diagnosticar **ruido de alta frecuencia**:
+interferencia de fuentes conmutadas, RF, o ver directamente el contenido
+espectral del propio transitorio (p. ej. la frecuencia natural de un RLC).
+
+> **Lo que NO sirve para ver:** ruido de red (50/60 Hz). La resolución en
+> frecuencia es $1/\text{ventana}$ — con una ventana típica de pocos cientos
+> de microsegundos, eso son varios **kHz** por punto, demasiado grueso para
+> resolver una frecuencia de 50 Hz. Para eso se necesitaría una ventana de
+> captura mucho más larga (decenas de milisegundos como mínimo), que este
+> script no controla — la ventana depende de la base de tiempo configurada
+> en el osciloscopio.
+
+## Promediar capturas (`--promediar`)
+
+```bash
+python capturar_osciloscopio.py --promediar 20 promedio.csv
+```
+
+Captura N trazas y guarda su **promedio punto a punto**, con la desviación
+estándar como tercera columna (`incertidumbre[V]`) — el ruido aleatorio cae
+como $1/\sqrt{N}$ al promediar, el resultado clásico de mediciones repetidas
+que se enseña en cualquier curso de física experimental. El resumen en
+consola incluye la reducción de ruido esperada para el N elegido.
+
+No se combina con `--streaming` (son dos modos distintos: uno repite y
+monitorea, el otro repite y promedia). Si pasas ambos, el script se detiene
+con un mensaje de error claro en vez de hacer algo ambiguo.
+
+## Log de estadísticas (`--log-estadisticas`)
+
+```bash
+python capturar_osciloscopio.py --log-estadisticas sesion.csv
+python capturar_osciloscopio.py --streaming --log-estadisticas sesion.csv
+```
+
+Agrega una fila (`disparo, timestamp, V_min, V_max, V_pp, V_rms, V_med`) por
+cada captura al archivo indicado. Si el archivo ya existe, sigue agregando
+filas — es un log que **crece entre sesiones**, no se sobrescribe. Con
+`--streaming` se agrega una fila por disparo; sin `--streaming`, una fila
+por ejecución del script.
+
+Útil para responder, con tus propios datos y herramientas, preguntas como
+"¿qué tan repetible fue mi medición?" o "¿mi montaje derivó durante la
+sesión?" — el script solo registra los números, no decide qué significan.
+
 ## Cómo funciona el código (para entenderlo, no solo copiarlo)
 
-El script tiene ocho funciones, cada una con una responsabilidad acotada:
+El script tiene trece funciones, cada una con una responsabilidad acotada:
 
 | Función | Qué hace |
 |---|---|
@@ -236,9 +295,13 @@ El script tiene ocho funciones, cada una con una responsabilidad acotada:
 | `leer_parametro_numerico(osc, comando)` | Le pregunta al osciloscopio un valor (p. ej. `C1:VDIV?`) e interpreta el prefijo de ingeniería (`u`, `m`, `k`, `M`...) de la respuesta. |
 | `descargar_forma_onda(osc, canal)` | Pide la forma de onda cruda en binario (`WF? DAT2`) y extrae los bytes de datos del bloque SCPI. |
 | `capturar_canal(osc, canal, esperar_disparo)` | Junta todo: arma el disparo, lee los parámetros de escala, descarga los bytes y los convierte en `(tiempo, voltaje)`. |
-| `guardar_csv(tiempo, voltaje, archivo)` | Escribe el CSV final. |
+| `guardar_csv(tiempo, voltaje, archivo)` | Escribe el CSV de una captura. |
+| `promediar_capturas(osc, canal, esperar_disparo, n)` | Captura n trazas y devuelve su promedio y desviación estándar; implementa `--promediar`. |
+| `guardar_csv_promedio(tiempo, voltaje_prom, voltaje_std, archivo)` | Escribe el CSV de un promedio, con la incertidumbre como tercera columna. |
+| `registrar_estadisticas(archivo_log, disparo, tiempo, voltaje)` | Agrega una fila de estadísticas al log (crea el encabezado solo si el archivo es nuevo); implementa `--log-estadisticas`. |
+| `calcular_fft(tiempo, voltaje)` | Espectro de amplitud (FFT) de una traza, sin el nivel DC; implementa el panel de `--fft`. |
 | `stream_capturas(osc, canal, esperar_disparo)` | Generador (`yield`): repite `capturar_canal` indefinidamente, una traza por iteración. |
-| `graficar_en_vivo(osc, canal, esperar_disparo, archivo_salida)` | Consume `stream_capturas` y actualiza un gráfico de matplotlib (con panel de estadísticas y ejes estables) en cada traza nueva; implementa `--streaming`. |
+| `graficar_en_vivo(osc, canal, esperar_disparo, archivo_salida, archivo_log, mostrar_fft)` | Consume `stream_capturas` y actualiza el gráfico (panel de estadísticas, ejes estables, FFT opcional) en cada traza nueva; implementa `--streaming`. |
 | `_OsciloscopioSimulado` | Implementa `query`/`write`/`read_raw` con una señal sintética en vez de hardware real; implementa `--demo`. |
 
 Los detalles que vale la pena entender si vas a tocar el código:
@@ -266,11 +329,13 @@ Los detalles que vale la pena entender si vas a tocar el código:
   `capturar_canal(osc, canal='C2')` por separado (el osciloscopio ya tiene
   ambos canales disparados juntos si comparten el mismo trigger), y junta
   los resultados en un CSV de tres columnas.
-- **Promediar varias repeticiones:** envuelve la llamada a `capturar_canal`
-  en un `for` y guarda cada traza con un nombre distinto
-  (`traza_001.csv`, `traza_002.csv`, ...) para promediarlas después en tu
-  análisis — el script no promedia nada por sí mismo, a propósito, para no
-  ocultarte cuánto varía tu medición real entre repeticiones.
+- **Promediar varias repeticiones:** usa `--promediar N` (ver
+  [Promediar capturas](#promediar-capturas---promediar)) si quieres el
+  promedio con incertidumbre. Si en cambio quieres conservar cada traza
+  individual sin promediar (para ver tú mismo cuánto varía cada repetición,
+  no solo el resultado final), envuelve `capturar_canal` en un `for` y
+  guarda cada una con un nombre distinto (`traza_001.csv`,
+  `traza_002.csv`, ...).
 - **Cambiar el modo de disparo:** si tu señal es continua y no necesitas
   `SINGLE`, usa `--sin-disparo` para leer lo que esté en pantalla en modo
   `RUN`/`AUTO`.
